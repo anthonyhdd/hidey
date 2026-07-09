@@ -461,7 +461,16 @@ function drawWatermark(c,W,H){ const bh=Math.round(150*dpr); const g=c.createLin
   c.font=`800 ${Math.round(17*dpr)}px -apple-system,sans-serif`; c.fillStyle="#39e6a4"; c.fillText("KAMO", W/2-Math.round(46*dpr), H-Math.round(26*dpr));
   c.fillStyle="rgba(255,255,255,.72)"; c.font=`600 ${Math.round(15*dpr)}px -apple-system,sans-serif`; c.fillText("· @kamo · kamo.app", W/2+Math.round(28*dpr), H-Math.round(26*dpr)); }
 function frameForShare(){ const out=document.createElement("canvas"); out.width=board.width; out.height=board.height; const c=out.getContext("2d"); c.drawImage(board,0,0); drawWatermark(c,out.width,out.height); return out; }
-function saveStatic(){ frameForShare().toBlob(b=>{ const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download="kamo.png"; a.click(); setTimeout(()=>URL.revokeObjectURL(u),4000); }); }
+/* native bridge (when wrapped in the Expo WebView) */
+function postNative(o){ if(window.ReactNativeWebView){ try{ window.ReactNativeWebView.postMessage(JSON.stringify(o)); return true; }catch(e){} } return false; }
+function blobToDataURL(b){ return new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(b); }); }
+async function deliver(blob,ext){
+  if(window.ReactNativeWebView){ const d=await blobToDataURL(blob); postNative({type:"share",ext,mime:blob.type||"",data:d}); return; }
+  const file=new File([blob],"kamo."+ext,{type:blob.type});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){ try{ await navigator.share({files:[file],title:"Can you find me?",text:"Can you find the hidden little guy? 🦎 #KAMO"}); return; }catch(e){ if(e.name==="AbortError") return; } }
+  const u=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=u; a.download=file.name; a.click(); setTimeout(()=>URL.revokeObjectURL(u),5000);
+}
+function saveStatic(){ frameForShare().toBlob(async b=>{ if(window.ReactNativeWebView){ const d=await blobToDataURL(b); postNative({type:"save",ext:"png",mime:"image/png",data:d}); return; } const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download="kamo.png"; a.click(); setTimeout(()=>URL.revokeObjectURL(u),4000); }); }
 
 function drawRevealFrame(c,W,H,t){
   const F=v=>Math.round(v*dpr); c.clearRect(0,0,W,H);
@@ -499,16 +508,8 @@ async function buildReveal(){
 }
 async function shareReveal(){
   busyEl.style.display="flex"; let media=null; try{ media=await buildReveal(); }catch(e){ media=null; } busyEl.style.display="none";
-  if(media&&media.blob&&media.blob.size>2000){
-    const ext=media.mime&&media.mime.includes("mp4")?"mp4":"webm"; const file=new File([media.blob],"kamo."+ext,{type:media.blob.type});
-    if(navigator.canShare&&navigator.canShare({files:[file]})){ try{ await navigator.share({files:[file],title:"Can you find me?",text:"Can you find the hidden little guy? 🦎 #KAMO"}); return; }catch(e){ if(e.name==="AbortError") return; } }
-    const u=URL.createObjectURL(media.blob); const a=document.createElement("a"); a.href=u; a.download=file.name; a.click(); setTimeout(()=>URL.revokeObjectURL(u),5000);
-    showHint("Reveal video saved",3000); return;
-  }
-  // fallback: static image share
-  const b=await new Promise(r=>frameForShare().toBlob(r,"image/png")); const f=new File([b],"kamo.png",{type:"image/png"});
-  if(navigator.canShare&&navigator.canShare({files:[f]})){ try{ await navigator.share({files:[f],title:"Can you find me?",text:"Can you find the hidden little guy? 🦎 #KAMO"}); return; }catch(e){ if(e.name==="AbortError") return; } }
-  saveStatic(); showHint("Saved image (video export not supported here)",3500);
+  if(media&&media.blob&&media.blob.size>2000){ await deliver(media.blob, media.mime&&media.mime.includes("mp4")?"mp4":"webm"); return; }
+  const b=await new Promise(r=>frameForShare().toBlob(r,"image/png")); await deliver(b,"png"); // fallback: static image
 }
 
 /* ===== ONBOARDING (once) ===== */
