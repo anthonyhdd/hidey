@@ -107,12 +107,6 @@
   /* ---------- PAINT MODE ---------- */
   #paintUI{position:absolute;left:0;right:0;bottom:0;z-index:15;display:none;padding:10px 12px calc(12px + var(--safe-b));
     background:linear-gradient(180deg,rgba(5,6,10,0),rgba(5,6,10,.86) 32%,var(--bg));}
-  #btnAuto{width:100%;height:54px;border:none;border-radius:16px;margin-bottom:10px;cursor:pointer;color:#04241a;font-weight:850;font-size:15.5px;
-    display:flex;align-items:center;justify-content:center;gap:9px;background:linear-gradient(135deg,var(--accent),#28c99b);box-shadow:0 8px 26px rgba(57,230,164,.4);transition:transform .12s;}
-  #btnAuto:active{transform:scale(.97);}
-  #btnAuto svg{width:23px;height:23px;stroke:#04241a;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
-  .pulse-glow{animation:pg 1.15s ease-in-out infinite;}
-  @keyframes pg{0%,100%{box-shadow:0 8px 26px rgba(57,230,164,.4)}50%{box-shadow:0 8px 26px rgba(57,230,164,.4),0 0 0 4px rgba(57,230,164,.45)}}
   .row{display:flex;gap:8px;align-items:center;justify-content:center;}
   #swatches{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:none;}
   #swatches::-webkit-scrollbar{display:none;}
@@ -165,7 +159,6 @@
 
     <!-- PAINT UI -->
     <div id="paintUI">
-      <button id="btnAuto"><svg viewBox="0 0 24 24"><path d="M5 3v4M3 5h4M6 17v4M4 19h4"/><path d="M13 3l3.5 7.5L24 14l-7.5 3.5L13 25l-3.5-7.5L2 14l7.5-3.5z" transform="scale(.8) translate(2 -1)"/></svg>Auto-Camo — hide it in 1 tap</button>
       <div id="swatches"></div>
       <div class="row" style="margin-top:2px">
         <div class="row" style="gap:8px">
@@ -181,7 +174,7 @@
         <button class="b primary" id="btnShare"><svg viewBox="0 0 24 24"><path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/></svg>Share reveal</button>
         <button class="b icon" id="btnSave" title="Save photo"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M5 20h14"/></svg></button>
       </div>
-      <div class="badge">Auto-Camo blends it · eyedropper to refine · Share = hide→reveal video</div>
+      <div class="badge">Eyedropper the scene color · paint to hide · Share = hide→reveal video</div>
     </div>
 
     <div id="busy"><div class="spinner"></div><div class="lbl">Creating your reveal…</div></div>
@@ -423,20 +416,11 @@ function capture(){
   board.style.display="block"; glCanvas.style.display="none"; cam.style.display="none"; photo.style.display="none"; shutterWrap.style.display="none"; flipBtn.style.display="none"; addBtn.style.display="none";
   mode="paint"; $("#paintUI").style.display="block"; undoStack.length=0; pushUndo();
   currentScore=computeScore(); showScore();
+  setTimeout(()=>hiderPoints.forEach(p=>{ const s=boardToScreen(p); poof(s.x,s.y); }),70);
   maybeOnboardPaint();
 }
 
-/* ===== AUTO-CAMO + SCORE ===== */
-function autoCamo(){
-  if(!maskCanvas||!blurCanvas) return; pushUndo();
-  const tmp=document.createElement("canvas"); tmp.width=board.width; tmp.height=board.height; const tc=tmp.getContext("2d");
-  tc.drawImage(blurCanvas,0,0); tc.globalCompositeOperation="destination-in"; tc.drawImage(maskCanvas,0,0);
-  ctx.save(); ctx.globalAlpha=0.9; ctx.drawImage(tmp,0,0); ctx.restore();
-  currentScore=computeScore(); showScore();
-  hiderPoints.forEach(p=>poof(boardToScreen(p).x,boardToScreen(p).y)); haptic(22);
-  $("#btnAuto").classList.remove("pulse-glow");
-  showHint("Auto-camo applied — refine with the eyedropper");
-}
+/* ===== CAMO SCORE ===== */
 function computeScore(){
   if(!maskCanvas||!blurCanvas) return 0;
   const W=board.width,H=board.height,step=Math.max(3,Math.round(Math.min(W,H)/140));
@@ -530,7 +514,7 @@ async function shareReveal(){
 /* ===== ONBOARDING (once) ===== */
 function firstRun(){ try{ return !localStorage.getItem("kamo_onb"); }catch(e){ return !seenPaint; } }
 function maybeOnboard(){ if(!firstRun()) return; showHint("Tap a figure to pose · drag to place",4200); setTimeout(()=>{ if(mode==="compose") showHint("Then tap Capture below ▼",3600); },4400); }
-function maybeOnboardPaint(){ if(!firstRun()) return; $("#btnAuto").classList.add("pulse-glow"); showHint("Tap Auto-Camo to hide it instantly",4000); try{ localStorage.setItem("kamo_onb","1"); }catch(e){} seenPaint=true; }
+function maybeOnboardPaint(){ if(!firstRun()) return; showHint("Eyedropper a scene color, then paint over the figure to hide it",4600); try{ localStorage.setItem("kamo_onb","1"); }catch(e){} seenPaint=true; }
 
 /* ---- wire ---- */
 $("#startBtn").onclick=startCamera;
@@ -539,7 +523,6 @@ $("#flip").onclick=()=>{ facing=facing==="environment"?"user":"environment"; sta
 $("#addHider").onclick=addHider;
 $("#shutter").onclick=()=>{ if(mode==="compose") capture(); };
 $("#fileInput").onchange=e=>{ if(e.target.files[0]) usePhoto(e.target.files[0]); e.target.value=""; };
-$("#btnAuto").onclick=autoCamo;
 $("#btnUndo").onclick=()=>{ if(undoStack.length>1){ undoStack.pop(); ctx.putImageData(undoStack[undoStack.length-1],0,0); currentScore=computeScore(); showScore(); } };
 $("#btnClear").onclick=()=>{ if(undoStack.length){ ctx.putImageData(undoStack[0],0,0); currentScore=computeScore(); showScore(); } };
 $("#btnBack").onclick=backToCompose;
@@ -573,7 +556,7 @@ initThree();
 /* debug bridge (?debug) */
 if(location.search.includes("debug")){
   window.HIDEY={ setBg:(url)=>{ photo.onload=()=>{}; photo.src=url; photo.style.display="block"; cam.style.display="none"; bgKind="photo"; enterCompose(); },
-    add:addHider, pose:(i)=>{ if(sel()) setPoseInstant(sel(),i); }, capture, autoCamo, score:()=>currentScore,
+    add:addHider, pose:(i)=>{ if(sel()) setPoseInstant(sel(),i); }, capture, score:()=>currentScore,
     reveal:buildReveal, chars:()=>characters.length, poses:POSES.map(p=>p.label),
     wheel:(x,y)=>openWheel(x,y), wheelHi:(x,y)=>updateWheel(x,y) };
 }
