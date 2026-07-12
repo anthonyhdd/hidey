@@ -222,7 +222,7 @@
       <li><b>◆</b> Camo — disruptive military pattern</li>
       <li><b>∞</b> All future brushes, free</li>
     </ul>
-    <button id="pwBuy" class="pwBuy">Unlock — 4,99 €</button>
+    <button id="pwBuy" class="pwBuy">Unlock — 2,99 €</button>
     <div class="pwFine">
       <button id="pwRestore">Restore</button>
       <a href="https://kamo.app/terms" target="_blank" rel="noopener">Terms</a>
@@ -540,10 +540,11 @@ function postNative(o){ if(window.ReactNativeWebView){ try{ window.ReactNativeWe
 function blobToDataURL(b){ return new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(b); }); }
 async function deliver(blob,ext){
   const file=new File([blob],"kamo."+ext,{type:blob.type});
-  // Web Share sheet works in Safari AND the app's WKWebView (iOS 15+) → use it first;
-  // it opens the native share sheet directly and avoids the custom bridge that was crashing.
+  // Native app: "Share" goes straight to Instagram Stories (native falls back to the
+  // system share sheet if Instagram isn't installed or the story share fails).
+  if(window.ReactNativeWebView){ const d=await blobToDataURL(blob); postNative({type:"ig-stories",ext,mime:blob.type||"",data:d}); return; }
+  // Web / Safari: system share sheet (IG-Stories deep link isn't reliable from the web).
   if(navigator.canShare&&navigator.canShare({files:[file]})){ try{ await navigator.share({files:[file],title:"Find it if you can",text:"Find it if you can 👀 #KAMO"}); return; }catch(e){ if(e.name==="AbortError") return; } }
-  if(window.ReactNativeWebView){ const d=await blobToDataURL(blob); postNative({type:"share",ext,mime:blob.type||"",data:d}); return; }
   const u=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=u; a.download=file.name; a.click(); setTimeout(()=>URL.revokeObjectURL(u),5000);
 }
 async function saveStatic(){ const b=await staticBlob();
