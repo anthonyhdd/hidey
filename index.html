@@ -271,7 +271,10 @@ let dpr=Math.max(1,Math.min(3,window.devicePixelRatio||1));
 let mode="compose", bgKind=null, facing="environment", stream=null;
 
 function showHint(t,ms=2600){ hintEl.textContent=t; hintEl.style.opacity=t?1:0; clearTimeout(showHint._t); if(t&&ms) showHint._t=setTimeout(()=>hintEl.style.opacity=0,ms); }
-function haptic(ms=8){ if(navigator.vibrate) navigator.vibrate(ms); }
+function haptic(ms=8){ if(window.ReactNativeWebView){ try{ window.ReactNativeWebView.postMessage(JSON.stringify({type:"haptic",style:"impact"})); }catch(e){} } if(navigator.vibrate) navigator.vibrate(ms); }
+/* throttled tactile tick while painting (native = expo-haptics selection; web = vibrate) */
+let _lastPaintHap=0;
+function paintHaptic(){ const t=performance.now(); if(t-_lastPaintHap<70) return; _lastPaintHap=t; if(window.ReactNativeWebView){ try{ window.ReactNativeWebView.postMessage(JSON.stringify({type:"haptic"})); }catch(e){} } else if(navigator.vibrate){ navigator.vibrate(5); } }
 
 /* ===== THREE.JS ===== */
 let renderer, scene, camera3;
@@ -502,10 +505,10 @@ function paintAt(p){
 function pick(p){ const d=ctx.getImageData(Math.max(0,Math.min(board.width-1,p.x|0)),Math.max(0,Math.min(board.height-1,p.y|0)),1,1).data; paintColor=`rgb(${d[0]},${d[1]},${d[2]})`; document.querySelectorAll(".sw").forEach(s=>s.classList.remove("active")); return paintColor; }
 board.addEventListener("pointerdown",e=>{ if(mode!=="paint")return; e.preventDefault(); board.setPointerCapture(e.pointerId); const p=pt(e);
   if(eyedrop){ const c=pick(p); const l=$("#loupe"); l.style.display="block"; l.style.left=e.clientX+"px"; l.style.top=e.clientY+"px"; l.style.background=c; return; }
-  pushUndo(); painting=true; paintAt._l=null; paintAt(p); });
+  pushUndo(); painting=true; paintAt._l=null; paintAt(p); paintHaptic(); });
 board.addEventListener("pointermove",e=>{ if(mode!=="paint")return; const p=pt(e);
   if(eyedrop&&(e.buttons||e.pressure)){ const c=pick(p); const l=$("#loupe"); l.style.left=e.clientX+"px"; l.style.top=e.clientY+"px"; l.style.background=c; return; }
-  if(painting) paintAt(p); });
+  if(painting){ paintAt(p); paintHaptic(); } });
 function endPaint(){ if(eyedrop){ eyedrop=false; $("#eyedrop").classList.remove("active"); $("#loupe").style.display="none"; showHint("Color grabbed — now paint the figure"); } if(painting){ painting=false; paintAt._l=null; currentScore=computeScore(); showScore(); } }
 board.addEventListener("pointerup",endPaint); board.addEventListener("pointercancel",endPaint);
 
