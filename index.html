@@ -158,6 +158,7 @@
   #sizeBar::before{content:"";position:absolute;left:50%;top:24px;bottom:24px;transform:translateX(-50%);width:4px;border-radius:2px;background:rgba(255,255,255,.32);box-shadow:0 1px 6px rgba(0,0,0,.55);}
   #sizeFill{position:absolute;left:50%;transform:translateX(-50%);width:4px;border-radius:2px;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.55);}
   #sizeThumb{position:absolute;left:50%;transform:translate(-50%,-50%);border-radius:50%;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.55);pointer-events:none;}
+  #sizeStar{position:absolute;top:2px;left:50%;transform:translateX(-50%);font-size:12px;line-height:1;color:var(--mint);opacity:.9;pointer-events:none;display:none;text-shadow:0 1px 6px rgba(0,0,0,.6),0 0 10px rgba(95,230,164,.5);}  /* subtle Pro marker (shown to free users) */
   /* before/after reveal (finished view) */
   #revealC{position:absolute;inset:0;z-index:14;display:none;}
   #revealHandle{position:absolute;top:0;bottom:0;width:46px;z-index:15;transform:translateX(-50%);display:none;touch-action:none;align-items:center;justify-content:center;}
@@ -259,7 +260,7 @@
     <button id="btnEdit" class="navbtn" style="display:none">Edit</button>
 
     <!-- vertical brush-size slider (free) -->
-    <div id="sizeBar"><div id="sizeFill"></div><div id="sizeThumb"></div></div>
+    <div id="sizeBar"><div id="sizeFill"></div><div id="sizeThumb"></div><div id="sizeStar">✦</div></div>
     <!-- before/after reveal (finished view) -->
     <canvas id="revealC"></canvas>
     <div id="revealHandle"><div class="rhKnob">‹ ›</div></div>
@@ -608,7 +609,7 @@ function capture(){
   flashEl.style.transition="none"; flashEl.style.opacity=".9"; requestAnimationFrame(()=>{ flashEl.style.transition="opacity .5s"; flashEl.style.opacity="0"; }); haptic(20);
   board.style.display="block"; glCanvas.style.display="none"; cam.style.display="none"; photo.style.display="none"; shutterWrap.style.display="none"; flipBtn.style.display="none"; $("#poseBar").style.display="none";
   mode="paint"; $("#paintUI").style.display="block"; undoStack.length=0; pushUndo();
-  sizeBar.style.display=isPro?"block":"none"; $("#btnDone").style.display="block"; $("#btnEdit").style.display="none"; finished=false; renderSizeBar();  // slider is Pro-only; free users size via the 3 dots
+  sizeBar.style.display="block"; $("#btnDone").style.display="block"; $("#btnEdit").style.display="none"; finished=false; renderSizeBar();  // slider visible for all; Pro-gated (tap → paywall), free users can also use the 3 dots
   $("#actionRow").style.display="none"; $("#btnBack").style.display="flex"; $(".brand").classList.add("mid");  // captured screen: Retake top-left, KAMO centered, actions hidden until Done
   setBrush("solid");
   currentScore=computeScore(); scoreChip.style.display="none";  // score chip appears after the first brush stroke, not at 0%
@@ -686,7 +687,7 @@ function buildBrushes(){ const w=$("#brushes"); if(!w) return; w.innerHTML="";
     el.className="brush"+(b.id===brushMode?" active":"")+(locked?" locked":""); el.dataset.id=b.id;
     el.innerHTML=b.name+(locked?' <svg class="lkico" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2.2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/></svg>':(b.pro?' <span class="lk">✦</span>':""));
     el.onclick=()=>{ if(b.pro&&!isPro){ openPaywall(); return; } setBrush(b.id); haptic(); }; w.appendChild(el); }); }
-function refreshProUI(){ buildBrushes(); if(typeof renderSizeBar==="function") renderSizeBar(); if(mode==="paint"&&!finished&&typeof sizeBar!=="undefined"&&sizeBar) sizeBar.style.display=isPro?"block":"none"; }
+function refreshProUI(){ buildBrushes(); if(typeof renderSizeBar==="function") renderSizeBar(); }
 buildBrushes();
 
 const paywallEl=$("#paywall");
@@ -869,12 +870,13 @@ $("#btnShare").onclick=shareReveal;
 $("#btnSave").onclick=saveStatic;
 
 /* ===== brush-size slider (free) + 3 quick-size presets ===== */
-const sizeBar=$("#sizeBar"), sizeThumb=$("#sizeThumb"), sizeFill=$("#sizeFill");
+const sizeBar=$("#sizeBar"), sizeThumb=$("#sizeThumb"), sizeFill=$("#sizeFill"), sizeStar=$("#sizeStar");
 const SB_PAD=24;
 function renderSizeBar(){ if(!sizeBar) return; const t=(brush-BRUSH_MIN)/(BRUSH_MAX-BRUSH_MIN);
   const h=sizeBar.clientHeight-SB_PAD*2, y=SB_PAD+(1-t)*h, d=Math.round(10+t*22);
   sizeThumb.style.width=d+"px"; sizeThumb.style.height=d+"px"; sizeThumb.style.top=y+"px";
-  sizeFill.style.top=y+"px"; sizeFill.style.bottom=SB_PAD+"px"; }
+  sizeFill.style.top=y+"px"; sizeFill.style.bottom=SB_PAD+"px";
+  if(sizeStar) sizeStar.style.display=isPro?"none":"block"; }  /* ✦ Pro hint for free users */
 function sizeFromEvent(e){ const r=sizeBar.getBoundingClientRect(), h=r.height-SB_PAD*2; let t=1-((e.clientY-r.top-SB_PAD)/h); t=Math.max(0,Math.min(1,t)); brush=Math.round(BRUSH_MIN+t*(BRUSH_MAX-BRUSH_MIN)); document.querySelectorAll(".bsz").forEach(x=>x.classList.remove("active")); renderSizeBar(); }
 let sizing=false;
 sizeBar.addEventListener("pointerdown",e=>{ if(!isPro){ openPaywall(); return; } e.preventDefault(); sizeBar.setPointerCapture(e.pointerId); sizing=true; sizeFromEvent(e); paintHaptic(); });
@@ -902,7 +904,7 @@ function enterFinished(){ if(finished) return; finished=true; currentScore=compu
   revealX=1; drawReveal(); let rv=1; const anim=()=>{ rv+=(0.5-rv)*0.14; revealX=rv; drawReveal(); if(Math.abs(rv-0.5)>0.01) requestAnimationFrame(anim); else { revealX=0.5; drawReveal(); } }; requestAnimationFrame(anim); }
 function exitFinished(){ finished=false; revealC.style.display="none"; revealHandle.style.display="none"; revealHint.style.display="none";
   ["swatches","brushes","editRow"].forEach(id=>{ const el=$("#"+id); if(el) el.style.display=""; });
-  const pb=$("#paintBadge"); if(pb) pb.style.display=""; sizeBar.style.display=isPro?"block":"none"; $("#btnDone").style.display="block"; $("#btnEdit").style.display="none";
+  const pb=$("#paintBadge"); if(pb) pb.style.display=""; sizeBar.style.display="block"; $("#btnDone").style.display="block"; $("#btnEdit").style.display="none";
   $("#actionRow").style.display="none";  // back to editing → hide Share/Save again
   showScore(); }
 $("#btnDone").onclick=enterFinished; $("#btnEdit").onclick=exitFinished;
