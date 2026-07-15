@@ -173,7 +173,15 @@
   .pwList{list-style:none;margin:16px 0 20px;padding:0;display:flex;flex-direction:column;gap:11px;}
   .pwList li{display:flex;align-items:center;gap:10px;font-size:14.5px;font-weight:600;}
   .pwList li b{color:var(--accent);font-size:16px;width:20px;text-align:center;}
-  .pwBuy{width:100%;height:56px;border:none;border-radius:16px;color:#04241a;font-size:16px;font-weight:900;background:linear-gradient(135deg,#58f0b4,var(--accent));box-shadow:0 10px 28px rgba(255,255,255,.35);cursor:pointer;}
+  .pwBuy{width:100%;height:56px;border:none;border-radius:16px;color:#0a0b0e;font-size:16px;font-weight:900;background:#fff;box-shadow:0 10px 28px rgba(0,0,0,.4);cursor:pointer;}
+  #pwPlans{display:flex;flex-direction:column;gap:10px;margin:18px 0 14px;}
+  .pwPlan{display:flex;align-items:center;justify-content:space-between;width:100%;padding:14px 16px;border-radius:16px;border:1.5px solid var(--stroke);background:rgba(255,255,255,.05);color:#fff;cursor:pointer;text-align:left;transition:border-color .18s,background .18s;}
+  .pwPlan.active{border-color:#fff;background:rgba(255,255,255,.14);}
+  .pwPlanName{display:block;font-size:17px;font-weight:800;}
+  .pwPlanMeta{display:block;font-size:12.5px;opacity:.62;margin-top:2px;}
+  .pwPlanPrice{font-size:13px;opacity:.75;white-space:nowrap;}
+  .pwPlanPrice b{font-size:19px;font-weight:900;color:#fff;}
+  #pwTerms{font-size:12px;opacity:.6;text-align:center;margin-top:10px;line-height:1.4;}
   .pwBuy:active{transform:scale(.98);}
   .pwFine{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:14px;}
   .pwFine a,.pwFine button{background:none;border:none;color:rgba(255,255,255,.5);font-size:12px;text-decoration:underline;cursor:pointer;padding:4px;}
@@ -257,16 +265,21 @@
 <!-- PAYWALL -->
 <div id="paywall">
   <div class="pwCard">
-    <div class="pwKick">KAMO Pro</div>
+    <div class="pwKick">KAMO+</div>
     <div class="pwTitle">Unlock every camo brush</div>
-    <div class="pwSub">Dapple, Leaf & Camo — realistic pattern brushes that paint camouflage from the exact colors you pick. Blend in seconds.</div>
-    <ul class="pwList">
-      <li><b>◍</b> Dapple — soft multi-tone blend</li>
-      <li><b>❦</b> Leaf — foliage texture for greenery</li>
-      <li><b>◆</b> Camo — disruptive military pattern</li>
-      <li><b>∞</b> All future brushes, free</li>
-    </ul>
-    <button id="pwBuy" class="pwBuy">Unlock — 2,99 €</button>
+    <div class="pwSub">All Pro pattern brushes (Dapple · Leaf · Camo) + the brush-size slider. Blend your figure in seconds.</div>
+    <div id="pwPlans">
+      <button class="pwPlan active" data-plan="weekly">
+        <div class="pwPlanTxt"><span class="pwPlanName">Weekly</span><span class="pwPlanMeta" id="pwWeeklyMeta">3-day free trial</span></div>
+        <div class="pwPlanPrice"><b id="pwWeeklyPrice">$2.99</b><span>/week</span></div>
+      </button>
+      <button class="pwPlan" data-plan="lifetime">
+        <div class="pwPlanTxt"><span class="pwPlanName">Lifetime</span><span class="pwPlanMeta">One-time · yours forever</span></div>
+        <div class="pwPlanPrice"><b id="pwLifetimePrice">$14.99</b></div>
+      </button>
+    </div>
+    <button id="pwBuy" class="pwBuy">Start free trial</button>
+    <div id="pwTerms">3 days free, then $2.99/week. Cancel anytime.</div>
     <div class="pwFine">
       <button id="pwRestore">Restore</button>
       <button class="pwlink" data-url="https://anthonyhdd.github.io/kamo/terms.html">Terms</button>
@@ -609,6 +622,7 @@ buildSwatches();
 
 /* ===== Pro brushes + paywall ===== */
 const PRODUCT_ID="com.blisscoach.kamo.pro";
+const WEEKLY_ID="com.blisscoach.kamo.weekly", LIFETIME_ID="com.blisscoach.kamo.pro"; let pwPlan="weekly";
 let isPro=false; try{ isPro=localStorage.getItem("kamo_pro")==="1"; }catch(e){}
 const BRUSHES=[{id:"solid",name:"Solid",pro:false},{id:"dapple",name:"Dapple",pro:true},{id:"leaf",name:"Leaf",pro:true},{id:"disrupt",name:"Camo",pro:true}];
 function setBrush(id){ brushMode=id; document.querySelectorAll("#brushes .brush").forEach(el=>el.classList.toggle("active",el.dataset.id===id)); }
@@ -625,14 +639,20 @@ function openPaywall(){ paywallEl.classList.add("show"); haptic(12); }
 function closePaywall(){ paywallEl.classList.remove("show"); }
 $("#pwClose").onclick=closePaywall;
 paywallEl.onclick=e=>{ if(e.target===paywallEl) closePaywall(); };
-$("#pwBuy").onclick=()=>{ if(window.ReactNativeWebView){ postNative({type:"purchase",product:PRODUCT_ID}); showHint("Opening checkout…"); } else { window.KAMO.setPro(true); showHint("KAMO Pro unlocked ✓"); } };
+function updatePwBuy(){ const b=$("#pwBuy"), t=$("#pwTerms"); if(!b) return;
+  if(pwPlan==="lifetime"){ const p=($("#pwLifetimePrice")||{}).textContent||"$14.99"; b.textContent="Unlock forever — "+p; if(t) t.textContent="One-time purchase. Yours forever."; }
+  else { const p=($("#pwWeeklyPrice")||{}).textContent||"$2.99"; b.textContent="Start free trial"; if(t) t.textContent="3 days free, then "+p+"/week. Cancel anytime."; } }
+document.querySelectorAll("#pwPlans .pwPlan").forEach(p=>p.onclick=()=>{ pwPlan=p.dataset.plan; document.querySelectorAll("#pwPlans .pwPlan").forEach(x=>x.classList.toggle("active",x===p)); updatePwBuy(); haptic(8); });
+$("#pwBuy").onclick=()=>{ const prod=pwPlan==="lifetime"?LIFETIME_ID:WEEKLY_ID; if(window.ReactNativeWebView){ postNative({type:"purchase",product:prod}); showHint("Opening checkout…"); } else { window.KAMO.setPro(true); showHint("KAMO+ unlocked ✓"); } };
+updatePwBuy();
 $("#pwRestore").onclick=()=>{ if(window.ReactNativeWebView){ postNative({type:"restore"}); showHint("Restoring…"); } else { showHint("Nothing to restore"); } };
 function openURL(u){ if(window.ReactNativeWebView){ postNative({type:"open-url",url:u}); } else { window.open(u,"_blank","noopener"); } }
 document.querySelectorAll(".pwlink").forEach(a=>a.onclick=()=>openURL(a.dataset.url));
 /* native bridge — RevenueCat (native) calls these on purchase/restore success + to inject the localized price */
 window.KAMO=window.KAMO||{};
 window.KAMO.setPro=(v)=>{ isPro=!!v; try{ localStorage.setItem("kamo_pro",v?"1":"0"); }catch(e){} refreshProUI(); if(v) closePaywall(); };
-window.KAMO.setPrice=(txt)=>{ if(txt) $("#pwBuy").textContent="Unlock — "+txt; };
+window.KAMO.setPrice=(txt)=>{ if(txt){ const e=$("#pwWeeklyPrice"); if(e) e.textContent=txt; updatePwBuy&&updatePwBuy(); } };
+window.KAMO.setPrices=(p)=>{ if(!p) return; if(p.weekly){ const e=$("#pwWeeklyPrice"); if(e) e.textContent=p.weekly; } if(p.lifetime){ const e=$("#pwLifetimePrice"); if(e) e.textContent=p.lifetime; } if(p.trial){ const e=$("#pwWeeklyMeta"); if(e) e.textContent=p.trial+" free trial"; } updatePwBuy&&updatePwBuy(); };
 window.KAMO.hint=(t)=>showHint(t);
 window.KAMO.setReferral=(code)=>{ referralCode=(code||"").toString().trim(); };
 
