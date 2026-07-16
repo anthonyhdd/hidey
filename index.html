@@ -33,6 +33,17 @@
   /* ---------- START OVERLAY ---------- */
   #start{position:absolute;inset:0;z-index:30;overflow:hidden;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;}
   #start .aurora{position:absolute;inset:0;z-index:0;background:radial-gradient(40% 24% at 50% 42%,rgba(255,255,255,.13),transparent 72%);}
+  /* full-bleed hero photo + a scrim so the copy stays readable over it.
+     Both are hidden while .booting so the splash hand-off stays invisible. */
+  #heroShot{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;opacity:.92;}
+  #heroScrim{position:absolute;inset:0;z-index:1;background:
+      linear-gradient(180deg,rgba(0,0,0,.55) 0%,rgba(0,0,0,.12) 26%,rgba(0,0,0,.62) 62%,rgba(0,0,0,.92) 100%);}
+  #start.booting #heroShot,#start.booting #heroScrim{display:none;}
+  /* with a photo behind, the icon+copy sit low and the aurora would muddy it */
+  #start:not(.booting) .aurora{display:none;}
+  #start:not(.booting){justify-content:flex-end;padding-bottom:calc(38px + var(--safe-b));}
+  #start:not(.booting) #heroIcon{width:64px;height:64px;border-radius:16px;margin-bottom:2px;}
+  #start:not(.booting) .heroFoot{display:none;}
   @keyframes auroraFloat{from{transform:translate(-3%,-2%) scale(1)}to{transform:translate(4%,3%) scale(1.14)}}
   .heroWrap{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;text-align:center;gap:16px;padding:0 30px;margin-bottom:3vh;}
   @font-face{font-family:'Kamo';src:url('vendor/SpaceGrotesk-700.woff2') format('woff2');font-weight:700;font-display:swap;}
@@ -347,9 +358,13 @@
     <!-- START (home) -->
     <div id="start" class="booting">
       <div class="aurora"></div>
+      <!-- a REAL photo with the REAL figure camouflaged in it (the app's own output).
+           It's the hook: you hunt for it, you find it, you get the product instantly. -->
+      <img id="heroShot" src="assets/hero.jpg" alt="" aria-hidden="true"/>
+      <div id="heroScrim"></div>
       <img id="heroIcon" src="icon.png" alt="KAMO"/>
       <h1 class="heroTitle">Hide a tiny figure<br/>in the real world</h1><!-- revealed only if the camera never opens -->
-      <p class="heroSub">Camouflage it, then dare your friends to spot it 👀</p>
+      <p class="heroSub">There's one hidden in this photo. Spot it? 👀</p>
       <button id="heroStart" class="heroCta" type="button">Tap to start</button>
       <button id="heroPick" class="heroPick" type="button">or pick a photo</button>
       <div id="heroMsg"></div>
