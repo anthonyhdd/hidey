@@ -816,7 +816,9 @@ function applyPlanAvailability(p){
 }
 window.KAMO.hint=(t)=>{ setPwBuyLoading(false); showHint(t); };
 window.KAMO.setReferral=(code)=>{ referralCode=(code||"").toString().trim(); };
-window.KAMO.setNativeCaps=(c)=>{ nativeCaps=c||{}; };
+window.KAMO.setNativeCaps=(c)=>{ nativeCaps=c||{}; if(typeof updateLightBtn==="function") updateLightBtn(); };
+// native torch refused/failed → don't leave the button lit claiming it's on
+window.KAMO.torchFailed=()=>{ torchOn=false; if(typeof updateLightBtn==="function") updateLightBtn(); showHint("Couldn't turn the light on"); };
 window.KAMO.revealDone=()=>{ try{ busyEl.style.display="none"; }catch(e){} };
 
 /* ===== SHARE: the challenge card (hidden scene + hook + "spot it?" + referral CTA) ===== */
