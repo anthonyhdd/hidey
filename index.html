@@ -57,9 +57,12 @@
   .heroSub{position:relative;z-index:2;margin:10px 0 0;font-family:var(--font);font-size:15px;line-height:1.45;color:rgba(255,255,255,.6);text-align:center;max-width:min(82vw,360px);}
   .heroCta{position:relative;z-index:3;margin-top:26px;padding:15px 32px;border:0;border-radius:999px;cursor:pointer;font-family:var(--font);font-weight:700;font-size:16.5px;letter-spacing:-.2px;color:#04120b;background:var(--mint);box-shadow:0 10px 34px rgba(95,230,164,.38);animation:heroPulse 2.6s ease-in-out infinite;-webkit-tap-highlight-color:transparent;}
   .heroCta:active{transform:scale(.97);}
+  .heroCta.busy{opacity:.72;animation:none;}
   @keyframes heroPulse{0%,100%{box-shadow:0 10px 30px rgba(95,230,164,.3);}50%{box-shadow:0 10px 46px rgba(95,230,164,.62);}}
   .heroPick{position:relative;z-index:3;margin-top:13px;padding:11px 22px;border-radius:999px;cursor:pointer;border:1px solid rgba(255,255,255,.24);background:rgba(255,255,255,.06);color:#fff;font-family:var(--font);font-weight:600;font-size:14.5px;-webkit-tap-highlight-color:transparent;}
   .heroPick:active{transform:scale(.97);}
+  /* camera refused → this is now the way in, so it stops looking secondary */
+  .heroPick.promote{background:var(--mint);border-color:var(--mint);color:#04120b;font-weight:800;font-size:15.5px;padding:14px 26px;box-shadow:0 8px 26px rgba(95,230,164,.34);}
   #heroMsg{position:relative;z-index:3;display:none;margin-top:16px;padding:0 26px;max-width:min(88vw,380px);text-align:center;font-family:var(--font);font-size:13.5px;line-height:1.45;color:rgba(255,255,255,.72);}
   @media (prefers-reduced-motion:reduce){ .heroCta{animation:none;} }
   @media (max-height:680px){ #heroIcon{width:96px;height:96px;} .heroTitle{font-size:23px;margin-top:18px;} .heroCta{margin-top:20px;} }
@@ -528,7 +531,21 @@ function camFail(msg){
   const m = $("#heroMsg");
   if(onHero && m){ m.textContent = msg; m.style.display = "block"; }
   else showHint(msg,0);
+  // the camera path just failed → make the path that DOES work the obvious one
+  const p = $("#heroPick"); if(onHero && p) p.classList.add("promote");
   console.warn("[cam]",msg);
+}
+/* getUserMedia that CANNOT hang.
+   App Review 1.0(9) on iPad: "the tap to start button was unresponsive". On iOS,
+   once the camera permission is denied at the system level, getUserMedia inside a
+   WKWebView can never settle — it neither resolves nor rejects. startCamera then
+   awaits forever, no message is ever shown, and the button looks dead. Racing it
+   against a timeout turns that hang into a normal failure we can talk about. */
+function gumSafe(c, ms=3500){
+  return Promise.race([
+    navigator.mediaDevices.getUserMedia(c),
+    new Promise((_,rej)=>setTimeout(()=>rej(Object.assign(new Error("camera timed out"),{name:"TimeoutError"})), ms))
+  ]);
 }
 // auto=true => launch attempt on boot: on any failure just stay on the branded
 // start screen silently (no scary hint); the user taps "Tap to start" to retry with a gesture.
@@ -537,12 +554,20 @@ async function startCamera(auto){
   if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ if(auto) revealHero(); else camFail("This browser can't open the camera. Try Safari, or tap “pick a photo”."); return; }
   const tries=[{video:{facingMode:{ideal:facing}},audio:false},{video:{facingMode:facing},audio:false},{video:true,audio:false}];
   let lastErr;
-  for(const c of tries){ try{ if(stream) stream.getTracks().forEach(t=>t.stop()); stream=await navigator.mediaDevices.getUserMedia(c); cam.srcObject=stream; cam.style.display="block"; photo.style.display="none"; try{await cam.play();}catch(_){} bgKind="cam"; torchOn=false; /* new track starts with the torch off */ enterCompose(); return; }catch(e){ lastErr=e; } }
+  for(const c of tries){
+    try{ if(stream) stream.getTracks().forEach(t=>t.stop()); stream=await gumSafe(c); cam.srcObject=stream; cam.style.display="block"; photo.style.display="none"; try{await cam.play();}catch(_){} bgKind="cam"; torchOn=false; /* new track starts with the torch off */ enterCompose(); return; }
+    catch(e){ lastErr=e;
+      // Permission-level refusals (and the iOS hang) won't be fixed by loosening
+      // constraints — retrying just costs another timeout before we can say anything.
+      if(e && (e.name==="NotAllowedError"||e.name==="TimeoutError"||e.name==="SecurityError")) break;
+    }
+  }
   if(auto){ revealHero(); return; } // camera didn't open → give the user the CTAs
   const n=lastErr&&lastErr.name;
   // inside the native app the camera setting lives under Settings › KAMO, not Safari
   const where = window.ReactNativeWebView ? "Settings › KAMO › Camera" : "Settings › Safari › Camera";
-  if(n==="NotAllowedError") camFail("KAMO needs the camera to drop your figure into the real world. Turn it on in "+where+" — or just tap “or pick a photo” below.");
+  // a hang (TimeoutError) on iOS almost always means the permission was denied
+  if(n==="NotAllowedError"||n==="TimeoutError") camFail("KAMO needs the camera to drop your figure into the real world. Turn it on in "+where+" — or just tap “or pick a photo” below.");
   else if(n==="NotFoundError"||n==="OverconstrainedError") camFail("No camera found — tap “or pick a photo” below to hide your figure in a picture instead.");
   else camFail("Couldn't reach the camera — tap “or pick a photo” below instead.");
 }
@@ -950,7 +975,17 @@ function maybeOnboardPaint(){ if(!firstRun()) return; try{ localStorage.setItem(
 
 /* ---- wire ---- */
 startEl.onclick=()=>startCamera();
-$("#heroStart").onclick=e=>{ e.stopPropagation(); startCamera(); };
+// The tap must ALWAYS visibly do something — App Review called this button
+// "unresponsive" when getUserMedia hung silently behind it.
+$("#heroStart").onclick=async e=>{
+  e.stopPropagation();
+  const b=e.currentTarget; if(b.dataset.busy==="1") return;
+  b.dataset.busy="1"; const label=b.textContent; b.textContent="Opening camera…"; b.classList.add("busy");
+  const restore=()=>{ b.dataset.busy=""; b.textContent=label; b.classList.remove("busy"); };
+  // gumSafe already bounds the wait, but never let the label stick if anything else stalls
+  const failsafe=setTimeout(restore, 5000);
+  try{ await startCamera(); } finally { clearTimeout(failsafe); restore(); }
+};
 // photo path never touches the camera — this is what keeps the app usable when
 // the camera is denied/unavailable (App Review devices hit exactly that).
 $("#heroPick").onclick=e=>{ e.stopPropagation(); $("#fileInput").click(); };
