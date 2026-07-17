@@ -378,7 +378,7 @@
       </button>
       <button class="pwPlan active" data-plan="lifetime">
         <div class="pwPlanTxt"><span class="pwPlanName">Lifetime</span><span class="pwPlanMeta">One-time · yours forever</span></div>
-        <div class="pwPlanPrice"><b id="pwLifetimePrice">$2.99</b></div>
+        <div class="pwPlanPrice"><b id="pwLifetimePrice">$14.99</b></div>
       </button>
     </div>
     <button id="pwBuy" class="pwBuy">Start free trial</button>
@@ -802,7 +802,9 @@ function setPwBuyLoading(on){ const b=$("#pwBuy"); if(!b) return;
 $("#pwClose").onclick=closePaywall;
 paywallEl.onclick=e=>{ if(e.target===paywallEl) closePaywall(); };
 function updatePwBuy(){ const b=$("#pwBuy"), t=$("#pwTerms"); if(!b) return;
-  if(pwPlan==="lifetime"){ const p=($("#pwLifetimePrice")||{}).textContent||"$2.99"; b.textContent="Unlock forever — "+p; if(t) t.textContent="One-time purchase. Yours forever."; }
+  // fallbacks must mirror the ASC products (Lifetime $14.99 / Weekly $2.99) — the
+  // native layer overwrites them with the real localized StoreKit price on load
+  if(pwPlan==="lifetime"){ const p=($("#pwLifetimePrice")||{}).textContent||"$14.99"; b.textContent="Unlock forever — "+p; if(t) t.textContent="One-time purchase. Yours forever."; }
   else { const p=($("#pwWeeklyPrice")||{}).textContent||"$2.99"; b.textContent="Start free trial"; if(t) t.textContent="3 days free, then "+p+"/week. Cancel anytime."; } }
 document.querySelectorAll("#pwPlans .pwPlan").forEach(p=>p.onclick=()=>{ pwPlan=p.dataset.plan; document.querySelectorAll("#pwPlans .pwPlan").forEach(x=>x.classList.toggle("active",x===p)); updatePwBuy(); haptic(8); });
 $("#pwBuy").onclick=()=>{ const prod=pwPlan==="lifetime"?LIFETIME_ID:WEEKLY_ID; haptic(16); if(window.ReactNativeWebView){ setPwBuyLoading(true); postNative({type:"purchase",product:prod}); } else { window.KAMO.setPro(true); showHint("KAMO+ unlocked ✓"); } };
