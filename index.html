@@ -555,13 +555,17 @@ async function startCamera(auto){
   const tries=[{video:{facingMode:{ideal:facing}},audio:false},{video:{facingMode:facing},audio:false},{video:true,audio:false}];
   let lastErr;
   for(const c of tries){
-    try{ if(stream) stream.getTracks().forEach(t=>t.stop()); stream=await gumSafe(c); cam.srcObject=stream; cam.style.display="block"; photo.style.display="none"; try{await cam.play();}catch(_){} bgKind="cam"; torchOn=false; /* new track starts with the torch off */ enterCompose(); return; }
+    try{ if(stream) stream.getTracks().forEach(t=>t.stop()); stream=await gumSafe(c); cam.srcObject=stream; cam.style.display="block"; photo.style.display="none"; try{await cam.play();}catch(_){} bgKind="cam"; torchOn=false; /* new track starts with the torch off */ track("camera_granted",{auto:!!auto}); enterCompose(); return; }
     catch(e){ lastErr=e;
       // Permission-level refusals (and the iOS hang) won't be fixed by loosening
       // constraints — retrying just costs another timeout before we can say anything.
       if(e && (e.name==="NotAllowedError"||e.name==="TimeoutError"||e.name==="SecurityError")) break;
     }
   }
+  const n0=lastErr&&lastErr.name;
+  // Camera refusal is THE make-or-break step for an AR toy — if this spikes, the
+  // whole funnel dies here and nothing downstream will explain why.
+  track("camera_denied",{auto:!!auto,reason:n0||"unknown"});
   if(auto){ revealHero(); return; } // camera didn't open → give the user the CTAs
   const n=lastErr&&lastErr.name;
   // inside the native app the camera setting lives under Settings › KAMO, not Safari
@@ -746,7 +750,7 @@ board.addEventListener("pointerdown",e=>{ if(mode!=="paint")return; e.preventDef
 board.addEventListener("pointermove",e=>{ if(mode!=="paint")return; const p=pt(e);
   if(eyedrop&&(e.buttons||e.pressure)){ const c=pick(p); const l=$("#loupe"); l.style.left=e.clientX+"px"; l.style.top=e.clientY+"px"; l.style.background=c; return; }
   if(painting){ paintAt(p); paintHaptic(); } });
-function endPaint(){ if(eyedrop){ eyedrop=false; $("#eyedrop").classList.remove("active"); $("#loupe").style.display="none"; showHint("Color grabbed — now paint the figure"); } if(painting){ painting=false; paintAt._l=null; currentScore=computeScore(); showScore(); } }
+function endPaint(){ if(eyedrop){ eyedrop=false; $("#eyedrop").classList.remove("active"); $("#loupe").style.display="none"; showHint("Color grabbed — now paint the figure"); } if(painting){ painting=false; paintAt._l=null; currentScore=computeScore(); showScore(); /* score = how well hidden; the one quality signal KAMO has, and the step right before sharing */ if(!endPaint._sent){ endPaint._sent=true; track("paint_completed",{score:Math.round(currentScore||0)}); } } }
 board.addEventListener("pointerup",endPaint); board.addEventListener("pointercancel",endPaint);
 
 let PALETTE=["#7c6f57","#4a5d3a","#2f3b2a","#6b6b6b","#9aa0a6","#2b2b2b","#c9b48a","#3a4a5a","#e8e0d0","#5a4632"];
@@ -789,7 +793,7 @@ function refreshProUI(){ buildBrushes(); if(typeof renderSizeBar==="function") r
 buildBrushes();
 
 const paywallEl=$("#paywall");
-function openPaywall(){ paywallEl.classList.add("show"); haptic(12); }
+function openPaywall(){ paywallEl.classList.add("show"); haptic(12); track("paywall_viewed"); }
 function closePaywall(){ paywallEl.classList.remove("show"); setPwBuyLoading(false); }
 /* buy button loading state — bridges the delay before the native StoreKit sheet appears */
 let _pwBuyTimer=null;
@@ -806,10 +810,10 @@ function updatePwBuy(){ const b=$("#pwBuy"), t=$("#pwTerms"); if(!b) return;
   // native layer overwrites them with the real localized StoreKit price on load
   if(pwPlan==="lifetime"){ const p=($("#pwLifetimePrice")||{}).textContent||"$14.99"; b.textContent="Unlock forever — "+p; if(t) t.textContent="One-time purchase. Yours forever."; }
   else { const p=($("#pwWeeklyPrice")||{}).textContent||"$2.99"; b.textContent="Start free trial"; if(t) t.textContent="3 days free, then "+p+"/week. Cancel anytime."; } }
-document.querySelectorAll("#pwPlans .pwPlan").forEach(p=>p.onclick=()=>{ pwPlan=p.dataset.plan; document.querySelectorAll("#pwPlans .pwPlan").forEach(x=>x.classList.toggle("active",x===p)); updatePwBuy(); haptic(8); });
+document.querySelectorAll("#pwPlans .pwPlan").forEach(p=>p.onclick=()=>{ pwPlan=p.dataset.plan; document.querySelectorAll("#pwPlans .pwPlan").forEach(x=>x.classList.toggle("active",x===p)); updatePwBuy(); haptic(8); track("plan_selected",{plan:pwPlan}); });
 $("#pwBuy").onclick=()=>{ const prod=pwPlan==="lifetime"?LIFETIME_ID:WEEKLY_ID; haptic(16); if(window.ReactNativeWebView){ setPwBuyLoading(true); postNative({type:"purchase",product:prod}); } else { window.KAMO.setPro(true); showHint("KAMO+ unlocked ✓"); } };
 updatePwBuy();
-$("#pwRestore").onclick=()=>{ if(window.ReactNativeWebView){ postNative({type:"restore"}); showHint("Restoring…"); } else { showHint("Nothing to restore"); } };
+$("#pwRestore").onclick=()=>{ track("restore_tapped"); if(window.ReactNativeWebView){ postNative({type:"restore"}); showHint("Restoring…"); } else { showHint("Nothing to restore"); } };
 function openURL(u){ if(window.ReactNativeWebView){ postNative({type:"open-url",url:u}); } else { window.open(u,"_blank","noopener"); } }
 document.querySelectorAll(".pwlink").forEach(a=>a.onclick=()=>openURL(a.dataset.url));
 /* native bridge — RevenueCat (native) calls these on purchase/restore success + to inject the localized price */
@@ -865,6 +869,11 @@ function drawWatermark(c,W,H){ const u=W/390, pad=Math.round(H*0.028); c.textAli
 function frameForShare(){ const out=document.createElement("canvas"); out.width=board.width; out.height=board.height; const c=out.getContext("2d"); c.drawImage(board,0,0); drawWatermark(c,out.width,out.height); return out; }
 /* native bridge (when wrapped in the Expo WebView) */
 function postNative(o){ if(window.ReactNativeWebView){ try{ window.ReactNativeWebView.postMessage(JSON.stringify(o)); return true; }catch(e){} } return false; }
+/* Analytics. The whole pre-share funnel (hero → camera → paint) lives here in the
+   web, so without this the native app can only ever see shares and purchases —
+   i.e. the bottom of the funnel with no denominator. Native forwards these to
+   Amplitude; event names are allow-listed there. Silent no-op in plain Safari. */
+function track(event,props){ postNative({type:"track",event:event,props:props||undefined}); }
 function blobToDataURL(b){ return new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(b); }); }
 async function deliver(blob,ext){
   const file=new File([blob],"kamo."+ext,{type:blob.type});
@@ -981,6 +990,7 @@ startEl.onclick=()=>startCamera();
 // "unresponsive" when getUserMedia hung silently behind it.
 $("#heroStart").onclick=async e=>{
   e.stopPropagation();
+  track("hero_tap");
   const b=e.currentTarget; if(b.dataset.busy==="1") return;
   b.dataset.busy="1"; const label=b.textContent; b.textContent="Opening camera…"; b.classList.add("busy");
   const restore=()=>{ b.dataset.busy=""; b.textContent=label; b.classList.remove("busy"); };
@@ -1101,6 +1111,10 @@ startCamera(true);
    taken us to compose in 2.5s (permission sheet left open, getUserMedia hanging,
    an unexpected throw), show the hero CTAs anyway. */
 setTimeout(()=>{ if(mode!=="compose" && startEl.style.display!=="none") revealHero(); },2500);
+
+/* The denominator for every other KAMO funnel step. Fired last so the bridge and
+   all handlers exist; native ignores it when running as plain web (no bridge). */
+track("app_opened",{referred:!!new URLSearchParams(location.search).get("r")});
 
 /* referral: a friend's challenge link (…/?r=<code>) — remember the code + welcome them */
 (function(){ try{ const rp=new URLSearchParams(location.search).get("r"); if(rp){ localStorage.setItem("kamo_ref",rp);  // referrer to credit (native reads this on first run)
